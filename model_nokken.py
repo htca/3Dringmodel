@@ -77,6 +77,7 @@ colors = [ "#ff0000","#00ff00", "#ffff00", "#ff00ff","#00ffff","#0000ff", "#d5a6
 
 closeProject()
 newProject( r"D:\projects_d\3D ringmodel\test", 1000 )
+setViewerEnabled(False)
 setModelAnalysisAspects( [ "STRUCT" ] )
 setModelDimension( "3D" )
 setDefaultMeshOrder( "QUADRATIC" )
@@ -453,5 +454,9 @@ addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/S
 setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL/LOCATI", "INTPNT" )
 setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI/LOCATI", "INTPNT" )
 addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/DISPLA" )
+
+setViewerEnabled(True)
+draw()
+
 # generateMesh( [] )
 # runSolver( [] )
