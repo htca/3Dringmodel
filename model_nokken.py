@@ -422,18 +422,11 @@ if variable_outside_loading:
         attach(GEOMETRYLOAD, te.name + " grout", te.name, te.outer_face)
         setValueFunction(GEOMETRYLOAD, te.name + " grout", "hydro_grout")
 
-
+    # water and soil load
     water_soil_elements = [tunnel_element
                            for tunnel_element in tunnel_elements
                            if n_stressless_ring + n_grout_ring < tunnel_element.ring <= n_stressless_ring + n_grout_ring + n_water_soil_ring]
-    # water load
-    setFunctionValues("water", [], [], [ -H_water, H_water ], [ 2*H_water*10*1000 , 0 ] )
-    addSet(GEOMETRYLOADSET, "waterbelasting")
-    for te in water_soil_elements:
-        createSurfaceLoad(te.name + " water", "waterbelasting")
-        setParameter(GEOMETRYLOAD, te.name + " water", "FORCE/VALUE", -1)
-        attach(GEOMETRYLOAD, te.name + " water", te.name, te.outer_face)
-        setValueFunction(GEOMETRYLOAD, te.name + " water", "water")
+
     addSet( GEOMETRYLOADSET, "buitenbelasting verticaal" )
     for te in water_soil_elements:
         createSurfaceLoad(te.name + " buiten vert", "buitenbelasting verticaal")
@@ -441,8 +434,6 @@ if variable_outside_loading:
         attach(GEOMETRYLOAD, te.name + " buiten vert", te.name, te.outer_face)
         setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
         setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
-
-
 
     setFunctionValues( "horizontalsoilload", [  ], [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
                                                    [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
@@ -457,6 +448,14 @@ if variable_outside_loading:
         attach(GEOMETRYLOAD, te.name + " buiten hor", te.name, te.outer_face)
         setValueFunction(GEOMETRYLOAD, te.name + " buiten hor", "horizontalsoilload")
         setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/DIRECT", 2)
+    # water load
+    setFunctionValues("water", [], [], [ -H_water, H_water ], [ 2*H_water*10*1000 , 0 ] )
+    addSet(GEOMETRYLOADSET, "waterbelasting")
+    for te in water_soil_elements:
+        createSurfaceLoad(te.name + " water", "waterbelasting")
+        setParameter(GEOMETRYLOAD, te.name + " water", "FORCE/VALUE", -1)
+        attach(GEOMETRYLOAD, te.name + " water", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " water", "water")
 else:
     addSet( GEOMETRYLOADSET, "buitenbelasting verticaal" )
     for te in tunnel_elements:
@@ -509,10 +508,26 @@ setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelas
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting horizontaal", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "waterbelasting", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 1)
-setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "nokken", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "nokken", 0)
 if variable_outside_loading:
     setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "grout", 1)
 
+
+rename(GEOMETRYLOADCOMBINATION, "Geometry load combination 1", "nokken")
+if variable_outside_loading:
+    rename(GEOMETRYLOADCOMBINATION, "Geometry load combination 2", "grout")
+    i = 3
+else:
+    i = 2
+rename(GEOMETRYLOADCOMBINATION, f"Geometry load combination {i}", "buitenbelasting verticaal")
+i += 1
+rename(GEOMETRYLOADCOMBINATION, f"Geometry load combination {i}", "buitenbelasting horizontaal")
+i += 1
+rename(GEOMETRYLOADCOMBINATION, f"Geometry load combination {i}", "waterbelasting")
+i += 1
+rename(GEOMETRYLOADCOMBINATION, f"Geometry load combination {i}", "Selfweight")
+i += 1
+rename(GEOMETRYLOADCOMBINATION, f"Geometry load combination {i}", "radial and tangitional")
 ############################################################################################
 ## Creating analysis
 ############################################################################################
