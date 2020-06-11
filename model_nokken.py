@@ -54,7 +54,18 @@ H_water = 20 # waterlevel above centerline
 k_bedding =  0.0123457 *1E9
 k_bedding = Es/(d_outer/2)
 F_nok = 14E6
-
+#bedding with ascend
+create_ascending_bedding = True
+k_bedding_low = 300
+k_bedding_high = 30000
+n_ring_k_bedding_low = 1
+n_ring_k_bedding_var = 3
+n_ring_90degree_k_bedding = 1
+h_ring_90degree_k_bedding = (d_inner / 2) + (d_outer / 2)
+x_start = 0
+x_k_bedding_low = n_ring_k_bedding_low * l_ring
+x_k_bedding_high = x_k_bedding_low + n_ring_k_bedding_var * l_ring
+x_k_bedding_end = x_k_bedding_high + n_ring_90degree_k_bedding * l_ring
 #soil/water
 cover = 15.95 #m on top of tunnel
 P_0   = 10E3    # surface load in N/m^2
@@ -115,7 +126,7 @@ for shape in namesIn(SHAPESET, "Shapes"):
 moveToShapeSet(namesIn(SHAPESET, "Shapes"),"ring 0")
 ring_0_elements = namesIn(SHAPESET, "ring 0")
 
-for i_ring in range(1,n_rings+1):
+for i_ring in range(1, n_rings+1):
     if (i_ring % 2) == 0:
         alpha = math.pi/n_segment
     else:
@@ -262,10 +273,31 @@ for element in tunnel_elements:
 
 
 #bedding interfaces
-addMaterial( "outer interface", "INTERF", "ELASTI", [] )
-setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSNZ", k_bedding )
-setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSSX", k_bedding/10 )
-setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSSY", k_bedding/10 )
+if not create_ascending_bedding:
+    addMaterial( "outer interface", "INTERF", "ELASTI", [] )
+    setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSNZ", k_bedding )
+    setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSSX", k_bedding/10 )
+    setParameter( MATERIAL, "outer interface", "LINEAR/ELAS6/DSSY", k_bedding/10 )
+else:
+    setFunctionValues("bedding",
+                      [x_start, x_k_bedding_low, x_k_bedding_high, x_k_bedding_high+0.001, x_k_bedding_end],
+                      [],
+                      [0, h_ring_90degree_k_bedding, h_ring_90degree_k_bedding+0.001, d_outer],
+                      [k_bedding_low, k_bedding_low, k_bedding_high, k_bedding_high, k_bedding_high,
+                       k_bedding_low, k_bedding_low, k_bedding_high, k_bedding_high, k_bedding_high,
+                       k_bedding_low, k_bedding_low, k_bedding_high, 0, 0,
+                       k_bedding_low, k_bedding_low, k_bedding_high, 0, 0])
+
+
+    # setFunctionValues("bedding", [], [x_start, x_k_bedding_low, x_k_bedding_high], [],
+    #                   [k_bedding_low, k_bedding_low, k_bedding_high])
+    addMaterial("outer interface", "INTERF", "ELASTI", [])
+    setParameter(MATERIAL, "outer interface", "LINEAR/ELAS6/DSNZ", 1)
+    setParameter(MATERIAL, "outer interface", "LINEAR/ELAS6/DSSX", 1/10)
+    setParameter(MATERIAL, "outer interface", "LINEAR/ELAS6/DSSY", 1/10)
+    setMaterialFunction("outer interface", "LINEAR/ELAS6/DSNZ", "bedding")
+    setMaterialFunction("outer interface", "LINEAR/ELAS6/DSSX", "bedding")
+    setMaterialFunction("outer interface", "LINEAR/ELAS6/DSSY", "bedding")
 addSet( GEOMETRYSUPPORTSET, "soilsprings" )
 createSurfaceSupport( "total",  "soilsprings")
 setParameter( GEOMETRYSUPPORT, "total", "AXES", [ 1, 2 ] )
