@@ -1,5 +1,10 @@
 import math
 import re
+
+############################################################################################
+## Class definitions
+############################################################################################
+
 class tunnel_element:
     def __init__(self, name):
         self.name = name
@@ -16,6 +21,10 @@ class tunnel_element:
         self.long_face = []
         self.trans_face = []
 
+############################################################################################
+## Function definitions
+############################################################################################
+
 def distance(coor1, coor2):
     return (math.sqrt((coor1[0]-coor2[0])**2 + (coor1[1]-coor2[1])**2 + (coor1[2]-coor2[2])**2))
 
@@ -25,6 +34,10 @@ def get_rings(elements, ringnumber):
         if ringnumber == element.ring:
             sel_elements.append(element)
     return(sel_elements)
+
+############################################################################################
+## Parameter input
+############################################################################################
 
 n_rings = 5
 d_inner = 11
@@ -58,6 +71,10 @@ Meshsize = 0.2
 
 colors = [ "#ff0000","#00ff00", "#ffff00", "#ff00ff","#00ffff","#0000ff", "#d5a6bd"]
 
+############################################################################################
+## Initialize project
+############################################################################################
+
 closeProject()
 newProject( r"D:\projects_d\3D ringmodel\test", 1000 )
 setModelAnalysisAspects( [ "STRUCT" ] )
@@ -65,6 +82,10 @@ setModelDimension( "3D" )
 setDefaultMeshOrder( "QUADRATIC" )
 setDefaultMesherType( "HEXQUAD" )
 setDefaultMidSideNodeLocation( "ONSHAP" )
+
+############################################################################################
+## Creating shapes
+############################################################################################
 
 createCylinder("Cylinder 1", [-l_ring, 0, 0], [1, 0, 0], d_inner/2, l_ring)
 createCylinder("Cylinder 2", [-l_ring, 0, 0], [1, 0, 0], d_outer/2, l_ring)
@@ -280,6 +301,11 @@ setElementSize( shapes(), Meshsize, -1, True )
 setMesherType( shapes(), "HEXQUAD" )
 clearMidSideNodeLocation( shapes() )
 
+
+############################################################################################
+## Creating supports
+############################################################################################
+
 addSet( GEOMETRYSUPPORTSET, "axiaal" )
 createSurfaceSupport( "Support 1", "axiaal" )
 setParameter( GEOMETRYSUPPORT, "Support 1", "AXES", [ 1, 2 ] )
@@ -291,6 +317,10 @@ for element in sel_elements:
     for face in element.trans_face:
         if face[0] < 0.5*l_ring:
             attach( GEOMETRYSUPPORT, "Support 1", element.name, [face] )
+
+############################################################################################
+## Creating Loads
+############################################################################################
 
 addSet( GEOMETRYLOADSET, "nokken" )
 q_nok = F_nok/(t_ring * b_nok)
@@ -368,6 +398,11 @@ for te in tunnel_elements:
 addSet( GEOMETRYLOADSET, "Selfweight" )
 createModelLoad( "Selfweight", "Selfweight" )
 
+
+############################################################################################
+## Creating loadcombinations
+############################################################################################
+
 setDefaultGeometryLoadCombinations(  )
 setGeometryLoadCombinationFactor( "Geometry load combination 1", "nokken", 1 )
 addGeometryLoadCombination( "" )
@@ -376,6 +411,10 @@ setGeometryLoadCombinationFactor( "Geometry load combination 6", "buitenbelastin
 setGeometryLoadCombinationFactor( "Geometry load combination 6", "waterbelasting", 1 )
 setGeometryLoadCombinationFactor( "Geometry load combination 6", "Selfweight", 1 )
 setGeometryLoadCombinationFactor( "Geometry load combination 1", "nokken", 1 )
+
+############################################################################################
+## Creating analysis
+############################################################################################
 
 addAnalysis( "Analysis1" )
 addAnalysisCommand( "Analysis1", "LINSTA", "Structural linear static" )
