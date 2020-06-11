@@ -61,11 +61,12 @@ k_bedding_high = 30000
 n_ring_k_bedding_low = 1
 n_ring_k_bedding_var = 3
 n_ring_90degree_k_bedding = 1
-h_ring_90degree_k_bedding = (d_inner / 2) + (d_outer / 2)
+h_ring_90degree_k_bedding = d_outer * ((2**(1/2)) / 2)
 x_start = 0
 x_k_bedding_low = n_ring_k_bedding_low * l_ring
 x_k_bedding_high = x_k_bedding_low + n_ring_k_bedding_var * l_ring
 x_k_bedding_end = x_k_bedding_high + n_ring_90degree_k_bedding * l_ring
+
 #soil/water
 cover = 15.95 #m on top of tunnel
 P_0   = 10E3    # surface load in N/m^2
@@ -75,8 +76,19 @@ z_w = 5 # waterlevel under surface
 # gamma_dry = 16E3 # density of dry soil kN/m3, not used
 phi_soil = 37.5 # degrees
 K_0 = 1-math.sin(math.radians(phi_soil))
+if variable_outside_loading:
+    K_0 = 0.5
 sigma_top = P_0 + gamma_sat*z_w + (gamma_sat-gamma_water)*(cover-z_w)
 H_water = cover-z_w
+# variable outside loading
+n_stressless_ring = 1
+n_grout_ring = 3
+n_water_soil_ring = 1
+pressure_grout_center = 2*10**5 #N/m^2
+gamma_grout = 16*10**3 #N/m^3
+pressure_grout_bottom = pressure_grout_center - gamma_grout * d_outer
+pressure_grout_top = pressure_grout_center + gamma_grout * d_outer
+
 
 Meshsize = 0.2
 
@@ -288,9 +300,6 @@ else:
                        k_bedding_low, k_bedding_low, k_bedding_high, 0, 0,
                        k_bedding_low, k_bedding_low, k_bedding_high, 0, 0])
 
-
-    # setFunctionValues("bedding", [], [x_start, x_k_bedding_low, x_k_bedding_high], [],
-    #                   [k_bedding_low, k_bedding_low, k_bedding_high])
     addMaterial("outer interface", "INTERF", "ELASTI", [])
     setParameter(MATERIAL, "outer interface", "LINEAR/ELAS6/DSNZ", 1)
     setParameter(MATERIAL, "outer interface", "LINEAR/ELAS6/DSSX", 1/10)
@@ -394,38 +403,87 @@ setFunctionValues( "verticalsoilload", [  ], [-d_outer/2-1, -0.001, 0, d_outer/2
                                              -load_ver_top,    -load_ver_top,    -load_ver_top,    -load_ver_top]
                                              )
 
-addSet( GEOMETRYLOADSET, "buitenbelasting verticaal" )
-for te in tunnel_elements:
-    createSurfaceLoad(te.name + " buiten vert", "buitenbelasting verticaal")
-    setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/VALUE", 1)
-    attach(GEOMETRYLOAD, te.name + " buiten vert", te.name, te.outer_face)
-    setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
-    setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
+if variable_outside_loading:
+    # Grout load
+    setFunctionValues("hydro_grout", [], [], [-d_outer, d_outer], [pressure_grout_bottom, pressure_grout_top])
+    grout_elements = [tunnel_element
+                      for tunnel_element in tunnel_elements
+                      if n_stressless_ring < tunnel_element.ring <= n_stressless_ring + n_grout_ring]
+    addSet(GEOMETRYLOADSET, "grout")
+    for te in grout_elements:
+        createSurfaceLoad(te.name + " grout", "grout")
+        setParameter(GEOMETRYLOAD, te.name + " grout", "FORCE/VALUE", 1)
+        attach(GEOMETRYLOAD, te.name + " grout", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " grout", "hydro_grout")
+
+
+    water_soil_elements = [tunnel_element
+                           for tunnel_element in tunnel_elements
+                           if n_stressless_ring + n_grout_ring < tunnel_element.ring <= n_stressless_ring + n_grout_ring + n_water_soil_ring]
+    # water load
+    setFunctionValues("water", [], [], [ -H_water, H_water ], [ 2*H_water*10*1000 , 0 ] )
+    addSet(GEOMETRYLOADSET, "waterbelasting")
+    for te in water_soil_elements:
+        createSurfaceLoad(te.name + " water", "waterbelasting")
+        setParameter(GEOMETRYLOAD, te.name + " water", "FORCE/VALUE", -1)
+        attach(GEOMETRYLOAD, te.name + " water", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " water", "water")
+    addSet( GEOMETRYLOADSET, "buitenbelasting verticaal" )
+    for te in water_soil_elements:
+        createSurfaceLoad(te.name + " buiten vert", "buitenbelasting verticaal")
+        setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/VALUE", 1)
+        attach(GEOMETRYLOAD, te.name + " buiten vert", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
+        setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
 
 
 
-setFunctionValues( "horizontalsoilload", [  ], [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
-                                               [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
-                                               [ load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
-                                                 load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
-                                                 load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
-                                                 load_hor_top,    load_hor_top,    -load_hor_top,    -load_hor_top ] )
-addSet( GEOMETRYLOADSET, "buitenbelasting horizontaal" )
-for te in tunnel_elements:
-    createSurfaceLoad(te.name + " buiten hor", "buitenbelasting horizontaal")
-    setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/VALUE", 1)
-    attach(GEOMETRYLOAD, te.name + " buiten hor", te.name, te.outer_face)
-    setValueFunction(GEOMETRYLOAD, te.name + " buiten hor", "horizontalsoilload")
-    setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/DIRECT", 2)
+    setFunctionValues( "horizontalsoilload", [  ], [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
+                                                   [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
+                                                   [ load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
+                                                     load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+                                                     load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+                                                     load_hor_top,    load_hor_top,    -load_hor_top,    -load_hor_top ] )
+    addSet( GEOMETRYLOADSET, "buitenbelasting horizontaal" )
+    for te in water_soil_elements:
+        createSurfaceLoad(te.name + " buiten hor", "buitenbelasting horizontaal")
+        setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/VALUE", 1)
+        attach(GEOMETRYLOAD, te.name + " buiten hor", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " buiten hor", "horizontalsoilload")
+        setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/DIRECT", 2)
+else:
+    addSet( GEOMETRYLOADSET, "buitenbelasting verticaal" )
+    for te in tunnel_elements:
+        createSurfaceLoad(te.name + " buiten vert", "buitenbelasting verticaal")
+        setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/VALUE", 1)
+        attach(GEOMETRYLOAD, te.name + " buiten vert", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
+        setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
 
-# water load
-setFunctionValues( "water", [  ], [  ], [ -H_water, H_water ], [ 2*H_water*10*1000 , 0 ] )
-addSet( GEOMETRYLOADSET, "waterbelasting" )
-for te in tunnel_elements:
-    createSurfaceLoad(te.name + " water", "waterbelasting")
-    setParameter(GEOMETRYLOAD, te.name + " water", "FORCE/VALUE", -1)
-    attach(GEOMETRYLOAD, te.name + " water", te.name, te.outer_face)
-    setValueFunction(GEOMETRYLOAD, te.name + " water", "water")
+
+
+    setFunctionValues( "horizontalsoilload", [  ], [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
+                                                   [-d_outer/2-1, -0.001, 0, d_outer/2+1 ],
+                                                   [ load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
+                                                     load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+                                                     load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+                                                     load_hor_top,    load_hor_top,    -load_hor_top,    -load_hor_top ] )
+    addSet( GEOMETRYLOADSET, "buitenbelasting horizontaal" )
+    for te in tunnel_elements:
+        createSurfaceLoad(te.name + " buiten hor", "buitenbelasting horizontaal")
+        setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/VALUE", 1)
+        attach(GEOMETRYLOAD, te.name + " buiten hor", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " buiten hor", "horizontalsoilload")
+        setParameter(GEOMETRYLOAD, te.name + " buiten hor", "FORCE/DIRECT", 2)
+
+    # water load
+    setFunctionValues( "water", [  ], [  ], [ -H_water, H_water ], [ 2*H_water*10*1000 , 0 ] )
+    addSet( GEOMETRYLOADSET, "waterbelasting" )
+    for te in tunnel_elements:
+        createSurfaceLoad(te.name + " water", "waterbelasting")
+        setParameter(GEOMETRYLOAD, te.name + " water", "FORCE/VALUE", -1)
+        attach(GEOMETRYLOAD, te.name + " water", te.name, te.outer_face)
+        setValueFunction(GEOMETRYLOAD, te.name + " water", "water")
 
 #selfweight
 addSet( GEOMETRYLOADSET, "Selfweight" )
@@ -435,60 +493,70 @@ createModelLoad( "Selfweight", "Selfweight" )
 ############################################################################################
 ## Creating loadcombinations
 ############################################################################################
-
-setDefaultGeometryLoadCombinations(  )
-setGeometryLoadCombinationFactor( "Geometry load combination 1", "nokken", 1 )
-addGeometryLoadCombination( "" )
-setGeometryLoadCombinationFactor( "Geometry load combination 6", "buitenbelasting verticaal", 1 )
-setGeometryLoadCombinationFactor( "Geometry load combination 6", "buitenbelasting horizontaal", 1 )
-setGeometryLoadCombinationFactor( "Geometry load combination 6", "waterbelasting", 1 )
-setGeometryLoadCombinationFactor( "Geometry load combination 6", "Selfweight", 1 )
-setGeometryLoadCombinationFactor( "Geometry load combination 1", "nokken", 1 )
+if variable_outside_loading:
+    LC = 7
+else:
+    LC = 6
+setDefaultGeometryLoadCombinations()
+addGeometryLoadCombination("")
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting verticaal", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting horizontaal", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "waterbelasting", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "nokken", 1)
+if variable_outside_loading:
+    setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "grout", 1)
 
 ############################################################################################
 ## Creating analysis
 ############################################################################################
+if create_analysis:
+    addAnalysis( "Analysis1" )
+    addAnalysisCommand( "Analysis1", "LINSTA", "Structural linear static" )
+    addAnalysis( "Analysis2" )
+    addAnalysisCommand( "Analysis2", "NONLIN", "Structural nonlinear" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR" )
+    if variable_outside_loading:
+        setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 7)
+    else:
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 6)
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT/EXETYP", "LOAD" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR", 1 )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/MAXITE", 10 )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/SIMULT", True )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/SIMULT", False )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY", True )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/DISPLA", False )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/FORCE", False )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/LINESE" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/LINESE", True )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/MAXITE", 10 )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/LINESE" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/LINESE", True )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/DISPLA", False )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/FORCE", False )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY", True )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
+    copyAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(1)", "" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/SELTYP", "USER" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL/LOCATI", "INTPNT" )
+    setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI/LOCATI", "INTPNT" )
+    addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/DISPLA" )
 
-addAnalysis( "Analysis1" )
-addAnalysisCommand( "Analysis1", "LINSTA", "Structural linear static" )
-addAnalysis( "Analysis2" )
-addAnalysisCommand( "Analysis2", "NONLIN", "Structural nonlinear" )
-renameAnalysis( "Analysis2", "Analysis2" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 6 )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT/EXETYP", "LOAD" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR", 1 )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/MAXITE", 10 )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/SIMULT", True )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/SIMULT", False )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY", True )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/DISPLA", False )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/FORCE", False )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/LINESE" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/LINESE", True )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/MAXITE", 10 )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/LINESE" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/LINESE", True )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/DISPLA", False )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/FORCE", False )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY", True )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY/TOLCON", 0.001 )
-copyAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(1)", "" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/SELTYP", "USER" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL/LOCATI", "INTPNT" )
-setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI/LOCATI", "INTPNT" )
-addAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/DISPLA" )
+
+if create_mesh:
+    generateMesh([])
 
 setViewerEnabled(True)
 draw()
 
-# generateMesh( [] )
-# runSolver( [] )
+if run_analysis:
+    runSolver( [] )
