@@ -42,12 +42,12 @@ def get_rings(elements, ringnumber):
 # Switches
 create_ascending_bedding = True
 variable_outside_loading = True
+create_dummy_interface_long = True
+create_dummy_interface_trans = True
 create_analysis = True
 create_mesh = True
 run_analysis_linsta = False
 run_analysis_nlsta = False
-create_dummy_interface_long = True
-create_dummy_interface_trans = True
 
 n_rings = 5
 d_inner = 11
@@ -609,9 +609,9 @@ if create_analysis:
     else:
         setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 6)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES", "0.01000(2) 0.00500(16)")
-    # setAnalysisCommandDetail("NLSTA", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/NEWTON/TYPNAM", "MODIFI")
-    setAnalysisCommandDetail("NLSTA", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/METNAM", "SECANT")
-    setAnalysisCommandDetail("NLSTA", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/SECANT/TYPNAM", "BFGS")
+    # setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/NEWTON/TYPNAM", "MODIFI")
+    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/METNAM", "SECANT")
+    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/SECANT/TYPNAM", "BFGS")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/MAXITE", 20)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY/NOCONV", "CONTIN")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/DISPLA", False)
