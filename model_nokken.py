@@ -1,5 +1,6 @@
 import math
 import re
+from os import getcwd
 
 ############################################################################################
 ## Class definitions
@@ -105,7 +106,10 @@ colors = [ "#ff0000","#00ff00", "#ffff00", "#ff00ff","#00ffff","#0000ff", "#d5a6
 ############################################################################################
 
 closeProject()
-newProject( r"D:\projects_d\3D ringmodel\test", 1000 )
+if "908644" in getcwd():
+    newProject(r"C:\Users\908644\Documents\Projecten\2020_boortunnel\github_workfolder", 1000)
+else:
+    newProject( r"D:\projects_d\3D ringmodel\test", 1000 )
 setViewerEnabled(False)
 setModelAnalysisAspects( [ "STRUCT" ] )
 setModelDimension( "3D" )
