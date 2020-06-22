@@ -48,6 +48,8 @@ create_analysis = True
 create_mesh = True
 run_analysis_linsta = False
 run_analysis_nlsta = False
+mc_int_trans = True
+mc_int_long = mc_int_trans
 
 n_rings = 5
 d_inner = 11
@@ -59,6 +61,14 @@ b_nok = 0.3
 
 Es = 4000E6
 H_water = 20  # waterlevel above centerline
+
+# MC interface vars
+mu_conc_to_conc = 0.4
+MC_phi_fric = math.atan(mu_conc_to_conc)
+MC_phi_dil = MC_phi_fric
+MC_cohesion = 1
+MC_tension_cut_off = 0.2*10**6
+
 
 # k = 0.0123457 N/mm3
 k_bedding =  0.0123457 *1E9
@@ -99,7 +109,7 @@ gamma_grout = 16*10**3  #N/m^3
 pressure_grout_bottom = pressure_grout_center - gamma_grout * d_outer / 2
 pressure_grout_top = pressure_grout_center + gamma_grout * d_outer / 2
 
-k_if_dummy = 1000
+
 
 Meshsize = 0.2
 
@@ -182,9 +192,9 @@ for i_ring in range(1, n_rings+1):
 
 remove(SHAPESET, ["ring 0"])
 
-for i_ring in range(1,n_rings+1):
-    targets = namesIn(SHAPESET,"ring " +str(i_ring-1))
-    tools = namesIn(SHAPESET,"ring " +str(i_ring))
+for i_ring in range(1, n_rings+1):
+    targets = namesIn(SHAPESET, "ring " + str(i_ring-1))
+    tools = namesIn(SHAPESET, "ring " + str(i_ring))
     for target in targets:
         for tool in tools:
             imprintIntersection(target, tool, True)
@@ -236,11 +246,28 @@ for i_ring in range(1,n_rings+1):
 
 
 k_if = 100*(30E9 * 1E-3)/(1E-3*d_outer*math.pi/n_segment)
+k_if_dummy = k_if * 0.0001
 #longitudinal interfaces
-addMaterial("interface long", "INTERF", "NONLIF", [])
-setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSNZ", k_if)
-setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSSX", k_if/10)
-setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSSY", k_if/10)
+if mc_int_long:
+    addMaterial("interface long", "INTERF", "FRICTI", [])
+    setParameter("MATERIAL", "interface long", "LINEAR/ELAS6/DSNZ", k_if)
+    setParameter("MATERIAL", "interface long", "LINEAR/ELAS6/DSSX", k_if / 10)
+    setParameter("MATERIAL", "interface long", "LINEAR/ELAS6/DSSY", k_if / 10)
+    setParameter("MATERIAL", "interface long", "COULOM/COHESI", MC_cohesion)
+    setParameter("MATERIAL", "interface long", "COULOM/PHI", MC_phi_fric)
+    setParameter("MATERIAL", "interface long", "COULOM/PSI", MC_phi_dil)
+    setParameter("MATERIAL", "interface long", "COULOM/OPNTYP", "TECTOF")
+    setParameter("MATERIAL", "interface long", "COULOM/TENSTR", MC_tension_cut_off)
+else:
+    addMaterial("interface long", "INTERF", "NONLIF", [])
+    setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSNZ", k_if)
+    setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSSX", k_if/10)
+    setParameter(MATERIAL, "interface long", "LINEAR/ELAS6/DSSY", k_if/10)
+
+
+
+
+
 if create_dummy_interface_long:
     addMaterial("dummy interface long", "INTERF", "ELASTI", [])
     setParameter(MATERIAL, "dummy interface long", "LINEAR/ELAS6/DSNZ", k_if_dummy)
@@ -288,10 +315,21 @@ for element in tunnel_elements:
 
 
 #transverse interfaces
-addMaterial("interface trans", "INTERF", "NONLIF", [])
-setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSNZ", k_if)
-setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSSX", k_if/10)
-setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSSY", k_if/10)
+if mc_int_trans:
+    addMaterial("interface trans", "INTERF", "FRICTI", [])
+    setParameter("MATERIAL", "interface trans", "LINEAR/ELAS6/DSNZ", k_if)
+    setParameter("MATERIAL", "interface trans", "LINEAR/ELAS6/DSSX", k_if / 10)
+    setParameter("MATERIAL", "interface trans", "LINEAR/ELAS6/DSSY", k_if / 10)
+    setParameter("MATERIAL", "interface trans", "COULOM/COHESI", MC_cohesion)
+    setParameter("MATERIAL", "interface trans", "COULOM/PHI", MC_phi_fric)
+    setParameter("MATERIAL", "interface trans", "COULOM/PSI", MC_phi_dil)
+    setParameter("MATERIAL", "interface trans", "COULOM/OPNTYP", "TECTOF")
+    setParameter("MATERIAL", "interface trans", "COULOM/TENSTR", MC_tension_cut_off)
+else:
+    addMaterial("interface trans", "INTERF", "NONLIF", [])
+    setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSNZ", k_if)
+    setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSSX", k_if/10)
+    setParameter(MATERIAL, "interface trans", "LINEAR/ELAS6/DSSY", k_if/10)
 if create_dummy_interface_trans:
     addMaterial("dummy interface trans", "INTERF", "ELASTI", [])
     setParameter(MATERIAL, "dummy interface trans", "LINEAR/ELAS6/DSNZ", k_if_dummy)
@@ -608,7 +646,11 @@ if create_analysis:
         setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 7)
     else:
         setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/LOADNR", 6)
-    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES", "0.01000(2) 0.00500(16)")
+    if mc_int_trans:
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES", "0.100000(2) 0.0500000(6) 0.0100000(46) 0.00500000(8)")
+    else:
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES",
+                                 "0.1000(2) 0.0500(6) 0.01(50)")
     # setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/NEWTON/TYPNAM", "MODIFI")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/METNAM", "SECANT")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/SECANT/TYPNAM", "BFGS")
@@ -617,6 +659,8 @@ if create_analysis:
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/DISPLA", False)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/FORCE", False)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY", True)
+    if mc_int_trans:
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/CONVER/ENERGY/TOLCON", 0.001)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/LINESE", True)
 
 
