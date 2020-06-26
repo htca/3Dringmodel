@@ -12,7 +12,7 @@ class tunnel_element:
         self.ring = int(re.split(" |_", name)[-2])
         self.elnr = int(re.split(" |_", name)[-1])
         self.faces = faces(name)
-        self.BBox = boundingBox(name)
+        # self.BBox = boundingBox(name)
         self.center = [(self.BBox[0]+self.BBox[1])/2, (self.BBox[2]+self.BBox[3])/2, (self.BBox[4]+self.BBox[5])/2]
         angle = math.atan2(self.center[2], self.center[1])
         if angle < 0: angle += 2 * math.pi
@@ -21,6 +21,48 @@ class tunnel_element:
         self.inner_face = []
         self.long_face = []
         self.trans_face = []
+        self.reinfo_grid = None
+
+    @property
+    def BBox(self):
+        return boundingBox(self.name)
+
+class grid_reinfo_element:
+    def __init__(self, name):
+        self.name = name
+        self.ring = int(re.split(" |_", name)[-2])
+        self.elnr = int(re.split(" |_", name)[-1])
+        self.faces = faces(name)
+        # self.BBox = boundingBox(name)
+        self.center = [(self.BBox[0]+self.BBox[1])/2, (self.BBox[2]+self.BBox[3])/2, (self.BBox[4]+self.BBox[5])/2]
+        angle = math.atan2(self.center[2], self.center[1])
+        if angle < 0: angle += 2 * math.pi
+        self.angle = angle
+        self.outer_face = []
+        self.inner_face = []
+        self.long_face = []
+        self.trans_face = []
+        self.surface_names = []
+
+    @property
+    def BBox(self):
+        return boundingBox(self.name)
+
+    def volume_to_grid(self):
+        self.surface_names = explodeShape([self.name])
+        for name in self.surface_names:
+            setShapeType(REINFORCEMENTSHAPE, name)
+            setReinforcementType(REINFORCEMENTSHAPE, name, "GRID")
+
+    def assign_material(self, mat_name: str):
+        assignMaterial(mat_name, SHAPE, self.surface_names)
+
+    def assign_geometry(self, mat_name: str):
+        assignGeometry(mat_name, SHAPE, self.surface_names)
+
+def hide_mesh(tunnel_elements):
+    names = [tunnel_element.name for tunnel_element in tunnel_elements]
+    hide(ELEMENTSET, names)
 
 ############################################################################################
 ## Function definitions
@@ -45,11 +87,13 @@ variable_outside_loading = True
 create_dummy_interface_long = True
 create_dummy_interface_trans = True
 create_analysis = True
-create_mesh = True
+create_mesh = False
 run_analysis_linsta = False
 run_analysis_nlsta = False
 mc_int_trans = True
 mc_int_long = mc_int_trans
+nl_concrete_ring_nr = [1, 2, 3, 4, 5]
+create_grid_reinfo_ring_nr = nl_concrete_ring_nr
 
 n_rings = 5
 d_inner = 11
@@ -115,6 +159,25 @@ Meshsize = 0.2
 
 colors = ["#ff0000", "#00ff00", "#ffff00", "#ff00ff", "#00ffff", "#0000ff", "#d5a6bd"]
 
+
+# grid reinfo
+d_reinfo = 16/1000
+spacing = 150/1000
+c_dekking = 35/1000
+d_inner_reinfo = d_inner + c_dekking + d_reinfo
+d_outer_reinfo = d_outer - c_dekking - d_reinfo
+precision = 10/1000
+f_ck = 45
+delta_f = 8
+f_cm = f_ck + delta_f
+f_ctm = 0.3*(f_ck**(2/3))
+E_ci = 215000*((f_cm/10)**(1/3))
+nu_c = 0.2
+G_f = 73*(f_cm**0.18)
+G_c = 250*G_f
+
+
+
 ############################################################################################
 ## Initialize project
 ############################################################################################
@@ -171,7 +234,7 @@ i = 1
 for shape in namesIn(SHAPESET, "Shapes"):
     renameShape(shape, "element " + str(0) + "_" + str(i))
     i +=1
-moveToShapeSet(namesIn(SHAPESET, "Shapes"),"ring 0")
+moveToShapeSet(namesIn(SHAPESET, "Shapes"), "ring 0")
 ring_0_elements = namesIn(SHAPESET, "ring 0")
 
 for i_ring in range(1, n_rings+1):
@@ -231,7 +294,7 @@ for shape in shapes():
     tunnel_elements.append(tunnel_element(shape))
 
 for i_ring in range(1,n_rings+1):
-    sel_elements = get_rings(tunnel_elements,i_ring)
+    sel_elements = get_rings(tunnel_elements, i_ring)
     for t_e in sel_elements:
         for face in t_e.faces:
             if distance([t_e.BBox[0],0,0],[face[0],0,0]) < 1E-3 or distance([t_e.BBox[1],0,0],[face[0],0,0]) < 1E-3:
@@ -243,6 +306,78 @@ for i_ring in range(1,n_rings+1):
                     t_e.inner_face.append(face)
                 else:
                     t_e.long_face.append(face)
+
+##############################################3
+# Create Reinfo
+##############################################3
+if create_grid_reinfo_ring_nr:
+    setCurrentShapeSet("Shapes")
+    createCylinder("Cage 1", [-l_ring, 0, 0], [1, 0, 0], d_inner_reinfo / 2, l_ring)
+    createCylinder("Cage 2", [-l_ring, 0, 0], [1, 0, 0], d_outer_reinfo / 2, l_ring)
+    subtract("Cage 2", ["Cage 1"], False, True)
+
+
+    additional_phi = math.tan((c_dekking+d_reinfo)/d_inner_reinfo)
+    createSheet("CageSheet 1", [[-1 - l_ring, 0, -(d_outer_reinfo / 2 + 1)],
+                                [1, 0, -(d_outer_reinfo / 2 + 1)],
+                                [1, 0, d_outer_reinfo / 2 + 1],
+                                [-1 - l_ring, 0, d_outer_reinfo / 2 + 1]])
+    arrayCopy(["CageSheet 1"], [0, 0, 0], [0, 0, 0], [2 * math.pi / n_segment - additional_phi, 0, 0], 1)
+    rotate(["CageSheet 1"], [0, 0, 0], [1, 0, 0], additional_phi)
+
+    subtract("Cage 2", ["CageSheet 2", "CageSheet 1"], False, True)
+    renameShape("Cage 2_3", "Reinfo")
+
+    for shape in shapes():
+        if "Cage" in shape:
+            removeShape([shape])
+
+    # create ring
+    arrayCopy(["Reinfo"], [0, 0, 0], [0, 0, 0], [2 * math.pi / n_segment, 0, 0], 6)
+    addSet(SHAPESET, "ring 0")
+    i = 1
+
+    for shape in namesIn(SHAPESET, "Shapes"):
+        if 'Reinfo' in  shape:
+            renameShape(shape, "Reinfo " + str(0) + "_" + str(i))
+            i += 1
+
+    moveToShapeSet(namesIn(SHAPESET, "Shapes"), "ring 0")
+    ring_0_reinfo = namesIn(SHAPESET, "ring 0")
+
+    for i_ring in range(1, n_rings + 1):
+        if (i_ring % 2) == 0:
+            alpha = math.pi / n_segment
+        else:
+            alpha = 0
+        copy_names = []
+        for copy_name in namesIn(SHAPESET, "ring 0"):
+            if "Reinfo" in copy_name:
+                copy_names.append(copy_name)
+        arrayCopy(copy_names, [l_ring * (i_ring), 0, 0], [0, 0, 0], [alpha, 0, 0], 1)
+        for shape in namesIn(SHAPESET, "ring 0"):
+            if not shape in ring_0_reinfo and 'Reinfo' in shape:
+                moveToShapeSet([shape], "ring " + str(i_ring))
+        i = 1
+        ring_colors = colors + colors
+        for shape in namesIn(SHAPESET, "ring " + str(i_ring)):
+            if "Reinfo" in shape:
+                renameShape(shape, "Reinfo " + str(i_ring) + "_" + str(i))
+                setShapeColor(ring_colors[i + 1], ["Reinfo " + str(i_ring) + "_" + str(i)])
+                i += 1
+
+    remove(SHAPESET, ["ring 0"])
+
+    reinforcement_elements = []
+    for shape in shapes():
+        if 'Reinfo' in shape:
+            reinforcement_elements.append(grid_reinfo_element(shape))
+
+    for reinforcement_element in reinforcement_elements:
+        for tunnel_element in tunnel_elements:
+            if distance(reinforcement_element.center, tunnel_element.center) < precision:
+                tunnel_element.reinfo_grid = reinforcement_element
+                break
 
 
 k_if = 100*(30E9 * 1E-3)/(1E-3*d_outer*math.pi/n_segment)
@@ -448,6 +583,56 @@ setElementClassType(SHAPE, shapes(), "STRSOL")
 assignMaterial("concrete", SHAPE, shapes())
 assignGeometry("axiaal coor", SHAPE, shapes())
 
+if nl_concrete_ring_nr:
+    addMaterial( "nl concrete", "CONCR", "TSCR", [] )
+    setParameter( MATERIAL, "nl concrete", "LINEAR/ELASTI/YOUNG", E_ci*10**6)
+    setParameter( MATERIAL, "nl concrete", "LINEAR/ELASTI/POISON", nu_c )
+    setParameter( MATERIAL, "nl concrete", "LINEAR/MASS/DENSIT", 2500 )
+    setParameter( MATERIAL, "nl concrete", "MODTYP/TOTCRK", "ROTATE" )
+    setParameter( MATERIAL, "nl concrete", "TENSIL/TENCRV", "HORDYK" )
+    setParameter( MATERIAL, "nl concrete", "TENSIL/TENSTR", f_ctm*10**6)
+    setParameter( MATERIAL, "nl concrete", "TENSIL/GF1", G_f )
+    setParameter( MATERIAL, "nl concrete", "TENSIL/RESTST", f_ctm*10**6/20 )
+    setParameter( MATERIAL, "nl concrete", "TENSIL/POISRE/POIRED", "DAMAGE" )
+    setParameter( MATERIAL, "nl concrete", "COMPRS/COMCRV", "PARABO" )
+    setParameter( MATERIAL, "nl concrete", "COMPRS/COMSTR", f_cm*10**6 )
+    setParameter( MATERIAL, "nl concrete", "COMPRS/GC", G_c)
+    setParameter( MATERIAL, "nl concrete", "COMPRS/RESCST", f_cm*10**6/20 )
+    setParameter( MATERIAL, "nl concrete", "COMPRS/REDUCT/REDCRV", "NONE" )
+
+    addGeometry("reinforcement geometry", "RSHEET", "REGRID", [])
+    setParameter(GEOMET, "reinforcement geometry", "SPACIN", [0.15, 0.15])
+    setParameter(GEOMET, "reinforcement geometry", "PHI", [0.016, 0.0016])
+    # setParameter(GEOMET, "reinforcement geometry", "XAXIS", [1, 0, 0])
+
+    # addMaterial("reinforcement material", "REINFO", "LINEAR", [])
+    # setParameter(MATERIAL, "reinforcement material", "LINEAR/ELASTI/YOUNG", 2.0e+11)
+
+    if False:
+        addMaterial("reinforcement material", "REINFO", "UNIAXI", [])
+        setParameter(MATERIAL, "reinforcement material", "ELASTI/ELASTI/YOUNG", 2e+11)
+        setParameter(MATERIAL, "reinforcement material", "ELASTI/MASS/DENSIT", 7850)
+    else:
+        addMaterial("reinforcement material", "REINFO", "VMISES", [])
+        setParameter(MATERIAL, "reinforcement material", "LINEAR/ELASTI/YOUNG", 2e+10)
+        setParameter(MATERIAL, "reinforcement material", "PLASTI/YLDTYP", "EPSRAT")
+        setParameter(MATERIAL, "reinforcement material", "PLASTI/YLDTYP", "EPSSIG")
+        setParameter(MATERIAL, "reinforcement material", "PLASTI/HARDI4/EPSSIG", [])
+        setParameter(MATERIAL, "reinforcement material", "PLASTI/HARDI4/EPSSIG", [0, 0, 0.002175, 4.35e+08, 0.1, 4.35e+08+(0.1-0.002175)*2e+10/1000])
+
+    for i_ring in range(1, n_rings+1):
+        if i_ring not in nl_concrete_ring_nr:
+            sel_elements = get_rings(tunnel_elements, i_ring)
+            for t_e in sel_elements:
+                removeShape([t_e.reinfo_grid.name])
+                t_e.reinfo_grid = None
+        else:
+            sel_elements = get_rings(tunnel_elements, i_ring)
+            for t_e in sel_elements:
+                assignMaterial("nl concrete", SHAPE, [t_e.name])
+                t_e.reinfo_grid.volume_to_grid()
+                t_e.reinfo_grid.assign_material('reinforcement material')
+                t_e.reinfo_grid.assign_geometry('reinforcement geometry')
 
 setElementSize(shapes(), Meshsize, -1, True)
 setMesherType(shapes(), "HEXQUAD")
@@ -691,19 +876,25 @@ if create_analysis:
     renameAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)", "nokken")
     renameAnalysis("Analysis1", "LINSTA")
     renameAnalysis("Analysis2", "NLSTA")
+
+setElementSize(shapes(), 0.4/4, -1, True)
+setMesherType(shapes(), "HEXQUAD")
+
 if create_mesh:
     if "Shapes" in names('SHAPESET'):
         remove(SHAPESET, ["Shapes"])
     generateMesh([])
+    hide(ELEMENTSET, ["bedding"])
 
 
 setViewerEnabled(True)
 draw()
-hide( ELEMENTSET, [ "bedding" ] )
 
 if run_analysis_linsta:
     runSolver(["LINSTA"])
 if run_analysis_nlsta:
     runSolver(["NLSTA"])
+
+
 
 print("Python script is finished.")
