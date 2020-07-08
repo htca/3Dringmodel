@@ -90,9 +90,9 @@ create_analysis = True
 create_mesh = False
 run_analysis_linsta = False
 run_analysis_nlsta = False
-mc_int_trans = True
+mc_int_trans = False
 mc_int_long = mc_int_trans
-nl_concrete_ring_nr = [1, 2, 3, 4, 5]
+nl_concrete_ring_nr = [4, 5]
 create_grid_reinfo_ring_nr = nl_concrete_ring_nr
 
 n_rings = 5
@@ -164,19 +164,19 @@ colors = ["#ff0000", "#00ff00", "#ffff00", "#ff00ff", "#00ffff", "#0000ff", "#d5
 d_reinfo = 16/1000
 spacing = 150/1000
 c_dekking = 35/1000
-d_inner_reinfo = d_inner + c_dekking + d_reinfo
-d_outer_reinfo = d_outer - c_dekking - d_reinfo
-precision = 10/1000
+d_inner_reinfo = d_inner + c_dekking*2 + d_reinfo*2
+d_outer_reinfo = d_outer - c_dekking*2 - d_reinfo*2
+precision = 50/1000
 f_ck = 45
 delta_f = 8
 f_cm = f_ck + delta_f
 f_ctm = 0.3*(f_ck**(2/3))
 E_ci = 215000*((f_cm/10)**(1/3))
-nu_c = 0.2
+nu_c = 0.15
 G_f = 73*(f_cm**0.18)
 G_c = 250*G_f
 
-
+nok_edge_distance = 0.1
 
 ############################################################################################
 ## Initialize project
@@ -264,10 +264,20 @@ for i_ring in range(1, n_rings+1):
 
 
 #create nok
-createSheet("nok 1", [[-1, -0.5*b_nok, (d_inner/2-0.1)],[-1, 0.5*b_nok, (d_inner/2-0.1)],[-1, 0.5*b_nok, (d_outer/2+0.1)],[-1, -0.5*b_nok, (d_outer/2+0.1)]])
+if nok_edge_distance < 0:
+    createSheet("nok 1", [[-1, -0.5*b_nok, (d_inner/2-0.1)],
+                          [-1, 0.5*b_nok, (d_inner/2-0.1)],
+                          [-1, 0.5*b_nok, (d_outer/2+0.1)],
+                          [-1, -0.5*b_nok, (d_outer/2+0.1)]])
+else:
+    createSheet("nok 1", [[-1, -0.5*b_nok, (d_inner/2+nok_edge_distance)],
+                          [-1, 0.5*b_nok, (d_inner/2+nok_edge_distance)],
+                          [-1, 0.5*b_nok, (d_outer/2-nok_edge_distance)],
+                          [-1, -0.5*b_nok, (d_outer/2-nok_edge_distance)]])
 rotate(["nok 1"], [0, 0, 0], [1, 0, 0], 2*math.pi/(n_segment)/3)
 mirror(["nok 1"], [0, 0, 0], [False, True, False], True)
 arrayCopy(["nok 1", "nok 2"], [0, 0, 0], [0, 0, 0], [2*math.pi/(n_segment),0, 0 ], n_segment-1)
+A_nok = areaOf("nok 1")
 
 nok=[]
 for sh in shapes():
@@ -312,8 +322,8 @@ for i_ring in range(1,n_rings+1):
 ##############################################3
 if create_grid_reinfo_ring_nr:
     setCurrentShapeSet("Shapes")
-    createCylinder("Cage 1", [-l_ring, 0, 0], [1, 0, 0], d_inner_reinfo / 2, l_ring)
-    createCylinder("Cage 2", [-l_ring, 0, 0], [1, 0, 0], d_outer_reinfo / 2, l_ring)
+    createCylinder("Cage 1", [-l_ring+c_dekking+d_reinfo, 0, 0], [1, 0, 0], d_inner_reinfo / 2, l_ring-2*(c_dekking+d_reinfo))
+    createCylinder("Cage 2", [-l_ring+c_dekking+d_reinfo, 0, 0], [1, 0, 0], d_outer_reinfo / 2, l_ring-2*(c_dekking+d_reinfo))
     subtract("Cage 2", ["Cage 1"], False, True)
 
 
@@ -538,7 +548,7 @@ else:
     setFunctionValues("bedding",
                       [x_start, x_k_bedding_high, x_k_bedding_high+0.001, x_k_bedding_low, x_k_bedding_end],
                       [],
-                      [0, h_ring_90degree_k_bedding, h_ring_90degree_k_bedding+0.001, d_outer],
+                      [0-d_outer/2-1, h_ring_90degree_k_bedding-d_outer/2, h_ring_90degree_k_bedding+0.001-d_outer/2, d_outer/2+1],
                       [k_bedding_high, k_bedding_high, k_bedding_high, k_bedding_low, k_bedding_low,
                        k_bedding_high, k_bedding_high, k_bedding_high, k_bedding_low, k_bedding_low,
                        0, 0, k_bedding_high, k_bedding_low, k_bedding_low,
@@ -601,8 +611,8 @@ if nl_concrete_ring_nr:
     setParameter( MATERIAL, "nl concrete", "COMPRS/REDUCT/REDCRV", "NONE" )
 
     addGeometry("reinforcement geometry", "RSHEET", "REGRID", [])
-    setParameter(GEOMET, "reinforcement geometry", "SPACIN", [0.15, 0.15])
-    setParameter(GEOMET, "reinforcement geometry", "PHI", [0.016, 0.0016])
+    setParameter(GEOMET, "reinforcement geometry", "SPACIN", [spacing, spacing])
+    setParameter(GEOMET, "reinforcement geometry", "PHI", [d_reinfo, d_reinfo])
     # setParameter(GEOMET, "reinforcement geometry", "XAXIS", [1, 0, 0])
 
     # addMaterial("reinforcement material", "REINFO", "LINEAR", [])
@@ -624,7 +634,8 @@ if nl_concrete_ring_nr:
         if i_ring not in nl_concrete_ring_nr:
             sel_elements = get_rings(tunnel_elements, i_ring)
             for t_e in sel_elements:
-                removeShape([t_e.reinfo_grid.name])
+                if t_e.reinfo_grid:
+                    removeShape([t_e.reinfo_grid.name])
                 t_e.reinfo_grid = None
         else:
             sel_elements = get_rings(tunnel_elements, i_ring)
@@ -660,7 +671,10 @@ for element in sel_elements:
 ############################################################################################
 
 addSet(GEOMETRYLOADSET, "nokken")
-q_nok = F_nok/(t_ring * b_nok)
+if nok_edge_distance:
+    q_nok = F_nok / A_nok
+else:
+    q_nok = F_nok/(t_ring * b_nok)
 
 #find axial loading points
 inok = 1
@@ -690,12 +704,19 @@ load_hor_center = K_0 * load_ver_center
 load_hor_bot = K_0 * load_ver_bot
 
 # soil load
-setFunctionValues("verticalsoilload", [], [-d_outer/2-1, -0.001, 0, d_outer/2+1],
-                                             [-d_outer/2-1, -0.001, 0, d_outer/2+1],
-                                             [load_ver_bot,     load_ver_bot,     load_ver_bot,     load_ver_bot,
-                                              load_ver_center,  load_ver_center,  load_ver_center,  load_ver_center,
-                                             -load_ver_center, -load_ver_center, -load_ver_center, -load_ver_center,
-                                             -load_ver_top,    -load_ver_top,    -load_ver_top,    -load_ver_top]
+# setFunctionValues("verticalsoilload", [], [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+#                                              [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+#                                              [load_ver_bot,     load_ver_bot,     load_ver_bot,     load_ver_bot,
+#                                               load_ver_center,  load_ver_center,  load_ver_center,  load_ver_center,
+#                                              -load_ver_center, -load_ver_center, -load_ver_center, -load_ver_center,
+#                                              -load_ver_top,    -load_ver_top,    -load_ver_top,    -load_ver_top]
+#                                             )
+setFunctionValues("verticalsoilload", [], [-d_outer/2-1, d_outer/2+1],
+                                             [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+                                             [load_ver_bot,     load_ver_bot,
+                                              load_ver_center,  load_ver_center,
+                                             -load_ver_center, -load_ver_center,
+                                             -load_ver_top,    -load_ver_top]
                                             )
 
 if variable_outside_loading:
@@ -724,10 +745,15 @@ if variable_outside_loading:
         setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
         setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
 
-    setFunctionValues("horizontalsoilload", [], [-d_outer/2-1, -0.001, 0, d_outer/2+1],
-                                                   [-d_outer/2-1, -0.001, 0, d_outer/2+1],
+    # setFunctionValues("horizontalsoilload", [], [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+    #                                                [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+    #                                                [load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
+    #                                                  load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+    #                                                  load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
+    #                                                  load_hor_top,    load_hor_top,    -load_hor_top,    -load_hor_top])
+    setFunctionValues("horizontalsoilload", [], [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+                                                   [-d_outer/2-1, 0, d_outer/2+1],
                                                    [load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
-                                                     load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
                                                      load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
                                                      load_hor_top,    load_hor_top,    -load_hor_top,    -load_hor_top])
     addSet(GEOMETRYLOADSET, "buitenbelasting horizontaal")
@@ -754,8 +780,8 @@ else:
         setValueFunction(GEOMETRYLOAD, te.name + " buiten vert", "verticalsoilload")
         setParameter(GEOMETRYLOAD, te.name + " buiten vert", "FORCE/DIRECT", 3)
 
-    setFunctionValues("horizontalsoilload", [], [-d_outer/2-1, -0.001, 0, d_outer/2+1],
-                                                   [-d_outer/2-1, -0.001, 0, d_outer/2+1],
+    setFunctionValues("horizontalsoilload", [], [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
+                                                   [-d_outer/2-1, -0.001, 0.001, d_outer/2+1],
                                                    [load_hor_bot,    load_hor_bot,    -load_hor_bot,    -load_hor_bot,
                                                      load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
                                                      load_hor_center, load_hor_center, -load_hor_center, -load_hor_center,
@@ -794,7 +820,7 @@ addGeometryLoadCombination("")
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting verticaal", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting horizontaal", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "waterbelasting", 1)
-setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 1)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 2.765)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "nokken", 0)
 if variable_outside_loading:
     setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "grout", 1)
@@ -870,6 +896,54 @@ if create_analysis:
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(1)/TOTAL/CAUCHY/LOCAL/LOCATI", "INTPNT")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(2)/TOTAL/CAUCHY/PRINCI/LOCATI", "INTPNT")
     addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/DISPLA")
+    if nl_concrete_ring_nr:
+        setAnalysisCommandDetail( "Analysis2", "Structural nonlinear", "OUTPUT(1)", False )
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(1)/TOTAL/GREEN/LOCAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(2)/TOTAL/GREEN/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(3)/TOTAL/GREEN/PRINCI")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(3)/TOTAL/CAUCHY/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(4)/TOTAL/CAUCHY/REAXES")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(4)/TOTAL/GREEN/REAXES")
+        # addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/ELMFOR(1)/REINFO/TRANSL/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/FORCE(1)/REACTI/TRANSL/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/FORCE(2)/EXTERN/TRANSL/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/FORCE(3)/RESIDU/TRANSL/GLOBAL")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRESS(3)/TOTAL/CAUCHY/GLOBAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRESS(4)/TOTAL/CAUCHY/REAXES/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(1)/TOTAL/GREEN/LOCAL/LOCATI",
+                                 "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(2)/TOTAL/GREEN/GLOBAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(3)/TOTAL/GREEN/PRINCI/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                  "OUTPUT(2)/USER/STRAIN(4)/TOTAL/GREEN/REAXES/LOCATI", "INTPNT")
+        # addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(5)/CRACK/GREEN")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(6)/CRKWDT/GREEN/LOCAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(7)/CRKWDT/GREEN/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(8)/CRKWDT/GREEN/PRINCI")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(6)/CRKWDT/GREEN/LOCAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(7)/CRKWDT/GREEN/GLOBAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(8)/CRKWDT/GREEN/PRINCI/LOCATI", "INTPNT")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/ELMFOR(1)/REINFO/TRANSL/GLOBAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(5)/TOTAL/TRACTI/LOCAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRESS(6)/TOTAL/TRACTI/GLOBAL")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRESS(5)/TOTAL/TRACTI/LOCAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRESS(6)/TOTAL/TRACTI/GLOBAL/LOCATI", "INTPNT")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(9)/TOTAL/TRACTI/LOCAL")
+        addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "OUTPUT(2)/USER/STRAIN(10)/TOTAL/TRACTI/GLOBAL")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(9)/TOTAL/TRACTI/LOCAL/LOCATI", "INTPNT")
+        setAnalysisCommandDetail("Analysis2", "Structural nonlinear",
+                                 "OUTPUT(2)/USER/STRAIN(10)/TOTAL/TRACTI/GLOBAL/LOCATI", "INTPNT")
+
 
 
     renameAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)", "radial and tangentional")
@@ -898,3 +972,12 @@ if run_analysis_nlsta:
 
 
 print("Python script is finished.")
+# generateMesh([])
+# exportModel( r"F:\TunnelBoringMachine\run_mc_added_sw_1\github_workfolder.dat", 5 )
+# saveProject(  )
+# runSolver(["LINSTA"])
+# setResultCase( [ "LINSTA", "Output linear static analysis", "radial and tangitional" ] )
+# selectResult( {"component": "DtZ", "result": "Displacements", "type": "Node"} )
+# setResultPlot( "contours" )
+# showView( "RESULT" )
+# fitAll(  )
