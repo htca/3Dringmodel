@@ -92,7 +92,7 @@ run_analysis_linsta = False
 run_analysis_nlsta = False
 mc_int_trans = False
 mc_int_long = mc_int_trans
-nl_concrete_ring_nr = [4, 5]
+nl_concrete_ring_nr = [1, 2, 3, 4, 5]
 create_grid_reinfo_ring_nr = nl_concrete_ring_nr
 
 n_rings = 5
@@ -117,7 +117,7 @@ MC_tension_cut_off = 0.2*10**6
 # k = 0.0123457 N/mm3
 k_bedding =  0.0123457 *1E9
 k_bedding = Es/(d_outer/2)
-F_nok = 14E6
+F_nok = 1E6 # total should be 14E6 but choosen to use 1E6 as load because for result handling it's more convient to see which absolute load is reached
 #bedding with ascend
 k_bedding_low = 300
 k_bedding_high = 30000
@@ -294,6 +294,11 @@ for n in nok:
 #     if "element" in sh:
 #         projection(sh, nok, [1, 0, 0], True)
 translate(nok, [l_ring*n_rings+1, 0, 0])
+
+nok_points = []
+for n in nok:
+    nok_points.append(faces(n)[0])
+
 for sh in shapes():
     if "element "+str(n_rings) in sh:
         projection(sh, nok, [-1, 0, 0], True)
@@ -488,7 +493,7 @@ for element in tunnel_elements:
         mindist = 1e6
         found_already = False
         for found in found_trans:
-            if distance(face1,found) < 1E-3:
+            if distance(face1, found) < 1E-3:
                 found_already = True
         if not found_already:
             for element2 in tunnel_elements:
@@ -676,21 +681,35 @@ if nok_edge_distance:
 else:
     q_nok = F_nok/(t_ring * b_nok)
 
+def is_nok_face(face, nok_points, max_dis):
+    for nok in nok_points:
+        if distance(nok, face) < max_dis:
+            return True
+    return False
+
+
 #find axial loading points
 inok = 1
 for te in tunnel_elements:
     if te.ring == n_rings:
         for face in te.trans_face:
             if face[0] > l_ring*n_rings - 0.5*l_ring:
-                angle = math.atan2(face[2],face[1])
-                if angle<0: angle +=2*math.pi
-                mindist=2*math.pi
-                for nok in nok_angles:
-                    if abs(angle-nok) < 0.01:
-                        createSurfaceLoad("Load nok "+str(inok), "nokken")
-                        setParameter(GEOMETRYLOAD, "Load nok "+str(inok), "FORCE/VALUE", -q_nok)
-                        attach(GEOMETRYLOAD, "Load nok "+str(inok), te.name, [face])
-                        inok+=1
+                if nok_edge_distance > 0:
+                    if is_nok_face(face=face, nok_points=nok_points, max_dis=50*10**-3):
+                        createSurfaceLoad("Load nok " + str(inok), "nokken")
+                        setParameter(GEOMETRYLOAD, "Load nok " + str(inok), "FORCE/VALUE", -q_nok)
+                        attach(GEOMETRYLOAD, "Load nok " + str(inok), te.name, [face])
+                        inok += 1
+                else:
+                    angle = math.atan2(face[2], face[1])
+                    if angle<0: angle +=2*math.pi
+                    mindist=2*math.pi
+                    for nok in nok_angles:
+                        if abs(angle-nok) < 0.01:
+                            createSurfaceLoad("Load nok "+str(inok), "nokken")
+                            setParameter(GEOMETRYLOAD, "Load nok "+str(inok), "FORCE/VALUE", -q_nok)
+                            attach(GEOMETRYLOAD, "Load nok "+str(inok), te.name, [face])
+                            inok+=1
 
 # create function
 z_top = cover - 1
@@ -820,7 +839,7 @@ addGeometryLoadCombination("")
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting verticaal", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "buitenbelasting horizontaal", 1)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "waterbelasting", 1)
-setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 2.765)
+setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "Selfweight", 2.766)
 setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "nokken", 0)
 if variable_outside_loading:
     setGeometryLoadCombinationFactor(f"Geometry load combination {LC}", "grout", 1)
@@ -861,7 +880,7 @@ if create_analysis:
         setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES", "0.100000(2) 0.0500000(6) 0.0100000(46) 0.00500000(8)")
     else:
         setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/LOAD/STEPS/EXPLIC/SIZES",
-                                 "0.1000(2) 0.0500(6) 0.01(50)")
+                                 "0.01(100)")
     # setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/NEWTON/TYPNAM", "MODIFI")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/METNAM", "SECANT")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(1)/ITERAT/METHOD/SECANT/TYPNAM", "BFGS")
@@ -878,7 +897,7 @@ if create_analysis:
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT/EXETYP", "LOAD")
     addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR", 1)
-    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/STEPS/EXPLIC/SIZES", "0.2(5)")
+    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/STEPS/EXPLIC/SIZES", "0.25(35)")
 
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/MAXITE", 10)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY", True)
