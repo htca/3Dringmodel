@@ -897,7 +897,7 @@ if create_analysis:
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT/EXETYP", "LOAD")
     addAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR")
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/LOADNR", 1)
-    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/STEPS/EXPLIC/SIZES", "0.25(35)")
+    setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/LOAD/STEPS/EXPLIC/SIZES", "0.25(56)")
 
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/MAXITE", 10)
     setAnalysisCommandDetail("Analysis2", "Structural nonlinear", "EXECUT(2)/ITERAT/CONVER/ENERGY", True)
